@@ -63,12 +63,12 @@ int main(void) {
         * your assignment)*/
         tv.tv_sec = 10;
         tv.tv_usec = 0;  /* and microseconds */
-
+         
         nready = select(maxfd + 1, &rset, NULL, NULL, &tv);
-        if (nready == 0) {
-            printf("No response from clients in %ld seconds\n", tv.tv_sec);
-            continue;
-        }
+        // if (nready == 0) {
+        //     printf("No response from clients in %ld seconds\n", tv.tv_sec);
+        //     continue;
+        // }
 
         if (nready == -1) {
             perror("select");
