@@ -18,7 +18,7 @@
 #include <arpa/inet.h>
 
 #ifndef PORT
-    #define PORT 31375
+    #define PORT 31300
 #endif
 
 struct client {
@@ -26,6 +26,7 @@ struct client {
     struct in_addr ipaddr;
     struct client *next;
 };
+
 
 static struct client *addclient(struct client *top, int fd, struct in_addr addr);
 static struct client *removeclient(struct client *top, int fd);
@@ -37,7 +38,7 @@ int bindandlisten(void);
 
 int main(void) {
     int clientfd, maxfd, nready;
-    struct client *p;
+    struct client *p; //used for access to list
     struct client *head = NULL;
     socklen_t len;
     struct sockaddr_in q;
@@ -63,18 +64,23 @@ int main(void) {
         * your assignment)*/
         tv.tv_sec = 10;
         tv.tv_usec = 0;  /* and microseconds */
-         
+        
+        //manage list of clients 
+        
+
+        //printf("hello\n");
         nready = select(maxfd + 1, &rset, NULL, NULL, &tv);
-        // if (nready == 0) {
-        //     printf("No response from clients in %ld seconds\n", tv.tv_sec);
-        //     continue;
-        // }
+        if (nready == 0) {
+             printf("No response from clients in %ld seconds\n", tv.tv_sec);
+            continue;
+         } 
 
         if (nready == -1) {
             perror("select");
+            //printf("select");
             continue;
         }
-
+        //printf("hello2\n");
         if (FD_ISSET(listenfd, &rset)){
             printf("a new client is connecting\n");
             len = sizeof(q);
@@ -138,7 +144,7 @@ int handleclient(struct client *p, struct client *top) {
 int bindandlisten(void) {
     struct sockaddr_in r;
     int listenfd;
-
+    // set up sockets
     if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket");
         exit(1);

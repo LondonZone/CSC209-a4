@@ -1,5 +1,5 @@
 CC = gcc
-PORT= 31375
+PORT= 31300
 CFLAGS= -DPORT=\$(PORT) -g -Wall
 
 
