@@ -47,6 +47,7 @@ int main(void) {
     fd_set rset;
 
     int i;
+    char buf[10]; //array for user to enter name
 
 
     int listenfd = bindandlisten();
@@ -80,9 +81,22 @@ int main(void) {
             //printf("select");
             continue;
         }
-        //printf("hello2\n");
+
+        /* read username from STDIN */
+        printf("What is your name?\n");
+        read(STDIN_FILENO, buf, sizeof(buf) + 1);
+        
+        strtok(buf,"\n"); //remove newline char from buffer
+        printf("Welcome, %s! ", buf);
+        printf("Awaiting opponent...\n");
+
+        /*next check of another client connected
+        1) print to STDOUT "You engage clientname"
+        2) call function to generate hitpoints and powermoves
+        */
+        
         if (FD_ISSET(listenfd, &rset)){
-            printf("a new client is connecting\n");
+            //printf("a new client is connecting\n");
             len = sizeof(q);
             if ((clientfd = accept(listenfd, (struct sockaddr *)&q, &len)) < 0) {
                 perror("accept");
@@ -92,7 +106,7 @@ int main(void) {
             if (clientfd > maxfd) {
                 maxfd = clientfd;
             }
-            printf("connection from %s\n", inet_ntoa(q.sin_addr));
+            //printf("connection from %s\n", inet_ntoa(q.sin_addr));
             head = addclient(head, clientfd, q.sin_addr);
         }
 
