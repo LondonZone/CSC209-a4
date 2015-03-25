@@ -1,4 +1,14 @@
 /*
+ ============================================================================
+ Name        : battle.c
+ Author      : David London-Schacht and Farhan Samir
+ Version     : 1
+ Copyright   : copyright David London-Schacht 2015
+ Description : CSC209 Assignment 4
+ ============================================================================
+ */
+
+/*
  * socket demonstrations:
  * This is the server side of an "internet domain" socket connection, for
  * communicating over the network.
@@ -21,6 +31,9 @@
     #define PORT 31300
 #endif
 
+#define MAX_SCORE  30
+#define MIN_SCORE  20
+
 struct client {
     int fd;
     struct in_addr ipaddr;
@@ -32,6 +45,7 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
 static struct client *removeclient(struct client *top, int fd);
 static void broadcast(struct client *top, char *s, int size);
 int handleclient(struct client *p, struct client *top);
+int generateRandom();
 
 
 int bindandlisten(void);
@@ -39,7 +53,7 @@ int bindandlisten(void);
 int main(void) {
     int clientfd, maxfd, nready;
     struct client *p; //used for access to list
-    struct client *head = NULL;
+    struct client *head = NULL; //client list
     socklen_t len;
     struct sockaddr_in q;
     struct timeval tv;
@@ -47,14 +61,17 @@ int main(void) {
     fd_set rset;
 
     int i;
+    int clientCount = 0;
     char buf[10]; //array for user to enter name
 
+    // Create a new socket to allow communication 
+    int listenfd = bindandlisten(); 
 
-    int listenfd = bindandlisten();
     // initialize allset and add listenfd to the
     // set of file descriptors passed into select
     FD_ZERO(&allset);
-    FD_SET(listenfd, &allset);
+    FD_SET(listenfd, &allset); // set of file descriptors
+
     // maxfd identifies how far into the set to search
     maxfd = listenfd;
 
@@ -66,10 +83,7 @@ int main(void) {
         tv.tv_sec = 10;
         tv.tv_usec = 0;  /* and microseconds */
         
-        //manage list of clients 
         
-
-        //printf("hello\n");
         nready = select(maxfd + 1, &rset, NULL, NULL, &tv);
         if (nready == 0) {
              printf("No response from clients in %ld seconds\n", tv.tv_sec);
@@ -78,7 +92,6 @@ int main(void) {
 
         if (nready == -1) {
             perror("select");
-            //printf("select");
             continue;
         }
 
@@ -90,14 +103,31 @@ int main(void) {
         printf("Welcome, %s! ", buf);
         printf("Awaiting opponent...\n");
 
-        /*next check of another client connected
+
+        /*next check if another client connected
         1) print to STDOUT "You engage clientname"
         2) call function to generate hitpoints and powermoves
         */
+
+        if(clientCount == 2)
+        {/* 2 connections eshablished */
         
-        if (FD_ISSET(listenfd, &rset)){
+            printf("%s\n" "**", buf ,"enters the arena**");
+            printf("%s\n", "You engage", buf);
+            //keep track of whos in the match 
+            // read message decide what action to take
+            // then write to other client 
+            // turn variable 
+
+        }
+        
+
+    
+
+
+        if(FD_ISSET(listenfd, &rset)){
             //printf("a new client is connecting\n");
-            len = sizeof(q);
+            len = sizeof(q); //accept connection of listenfd stream socket
             if ((clientfd = accept(listenfd, (struct sockaddr *)&q, &len)) < 0) {
                 perror("accept");
                 exit(1);
@@ -108,12 +138,14 @@ int main(void) {
             }
             //printf("connection from %s\n", inet_ntoa(q.sin_addr));
             head = addclient(head, clientfd, q.sin_addr);
+            clientCount++;
+            // add newly established connection
         }
 
         for(i = 0; i <= maxfd; i++) {
             if (FD_ISSET(i, &rset)) {
                 for (p = head; p != NULL; p = p->next) {
-                    if (p->fd == i) {
+                    if (p->fd == i) { //assigning client fd to i
                         int result = handleclient(p, head);
                         if (result == -1) {
                             int tmp_fd = p->fd;
@@ -137,7 +169,7 @@ int handleclient(struct client *p, struct client *top) {
     if (len > 0) {
         buf[len] = '\0';
         printf("Received %d bytes: %s", len, buf);
-        sprintf(outbuf, "%s says: %s", inet_ntoa(p->ipaddr), buf);
+        sprintf(outbuf, "%s says: %s", inet_ntoa(p->ipaddr), buf); //print to buffer
         broadcast(top, outbuf, strlen(outbuf));
         return 0;
     } else if (len == 0) {
@@ -154,6 +186,8 @@ int handleclient(struct client *p, struct client *top) {
 
  /* bind and listen, abort on error
   * returns FD of listening socket
+
+  Bind system call binds a socket to an address
   */
 int bindandlisten(void) {
     struct sockaddr_in r;
@@ -181,7 +215,7 @@ int bindandlisten(void) {
         perror("listen");
         exit(1);
     }
-    return listenfd;
+    return listenfd;  //Return new socket.
 }
 
 static struct client *addclient(struct client *top, int fd, struct in_addr addr) {
@@ -226,4 +260,41 @@ static void broadcast(struct client *top, char *s, int size) {
         write(p->fd, s, size);
     }
     /* should probably check write() return value and perhaps remove client */
+}
+
+/* 
+===========================================================================
+ 
+* Each player starts a match with between 20 and 30 hitpoints. 
+    (Note that hitpoints and powermoves are reset to random values on the start of a new match,
+    independent of what the values may have been following their previous match.)
+
+* Each player starts a match with between one and three powermoves.
+* Damage from a regular attack is 2-6 hitpoints.
+* Powermoves have a 50% chance of missing. If they hit, 
+then they cause three times the damage of a regular attack.
+ 
+ ============================================================================
+ */
+// MAX_SCORE and MIN_SCORE macros defined above
+int generateRandom(){
+
+    int randomnumber = random() % (MAX_SCORE - MIN_SCORE + 1) + MIN_SCORE;
+    return randomnumber;
+
+
+}
+// initialize powermoves and attacks
+int initAttacks(){
+
+
+}
+int generatePowerMoves(){
+
+}
+
+void findMatch(struct client *a){
+
+
+
 }
