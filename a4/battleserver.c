@@ -45,7 +45,8 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
 static struct client *removeclient(struct client *top, int fd);
 static void broadcast(struct client *top, char *s, int size);
 int handleclient(struct client *p, struct client *top);
-int generateRandom();
+int generateHitPoints();
+void computeDamage(int attack_points, int hit_points, char buffer[]);
 
 
 int bindandlisten(void);
@@ -277,24 +278,73 @@ then they cause three times the damage of a regular attack.
  ============================================================================
  */
 // MAX_SCORE and MIN_SCORE macros defined above
-int generateRandom(){
+int generateHitPoints(){
 
     int randomnumber = random() % (MAX_SCORE - MIN_SCORE + 1) + MIN_SCORE;
     return randomnumber;
 
 
 }
-// initialize powermoves and attacks
-int initAttacks(){
+
+// initialize Regular Attack points in range 2-6
+int generateAttacks(){
+
+    int attackPoints = random() % (6 - 2 + 1) + 2;
+    return attackPoints;
 
 
 }
+
+// initialize powermoves in range 1-3
 int generatePowerMoves(){
 
+    int numMoves = 1 + (random() % 3)
+    return numMoves;
+
 }
+
+// Compute Damage from attack
+void computeDamage(int attack_points, int hit_points, char buffer[]){
+
+    //Powermoves have a 50% chance of missing.
+    int accuracy = 1 + (random() % 2)  
+    int numPowermoves = generatePowerMoves();
+    int damage = 0;
+    char move[2];
+
+    if(move == "p") // if STDIN is a powermove
+    { 
+       if(numPowermoves >=1)
+       {
+        numPowermoves -= 1;
+            if(accuracy == 1)//Powermoves hits
+            {   
+                damage = (3 * attack_points);
+                hit_points -= damage; //powermoves cause 3x the damage of a regular attack.
+                printf("%s%s\n","you hit", buffer , "for", damage, "damage!");
+
+            }else{
+                printf("you missed!");
+            }
+        }
+
+    // regular attack
+    }else if(move == "a")
+    {
+
+        hit_points -= attack_points; 
+        printf("%s%s\n","you hit", buffer , "for", attack_points, "damage!");
+
+    }
+    
+    
+}
+
 
 void findMatch(struct client *a){
 
 
 
 }
+
+
