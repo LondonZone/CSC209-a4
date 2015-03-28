@@ -31,11 +31,10 @@
     #define PORT 31300
 #endif
 
-#define MAX_SCORE  30
-#define MIN_SCORE  20
 
 struct client {
     int fd;
+    char *name;
     struct in_addr ipaddr;
     struct client *next;
 };
@@ -47,24 +46,24 @@ static void broadcast(struct client *top, char *s, int size);
 int handleclient(struct client *p, struct client *top);
 int generateHitPoints();
 void computeDamage(int attack_points, int hit_points, char buffer[]);
+int find_network_newline(char *buf, int inbuf);
 
 
 int bindandlisten(void);
 
-int main(void) {
+int main(void) 
+{   
+    printf("%d\n", PORT);
     int clientfd, maxfd, nready;
     struct client *p; //used for access to list
     struct client *head = NULL; //client list
     socklen_t len;
     struct sockaddr_in q;
-    struct timeval tv;
     fd_set allset;
     fd_set rset;
 
     int i;
-    int clientCount = 0;
-    char buf[10]; //array for user to enter name
-
+    printf("here\n");
     // Create a new socket to allow communication 
     int listenfd = bindandlisten(); 
 
@@ -76,18 +75,18 @@ int main(void) {
     // maxfd identifies how far into the set to search
     maxfd = listenfd;
 
-    while (1) {
+    while (1) 
+    {
         // make a copy of the set before we pass it into select
+        printf("here\n");
         rset = allset;
-        /* timeout in seconds (You may not need to use a timeout for
-        * your assignment)*/
-        tv.tv_sec = 10;
-        tv.tv_usec = 0;  /* and microseconds */
+        /*select will wait until an exceptional event occurs when tv is NULL*/
+    
         
-        
-        nready = select(maxfd + 1, &rset, NULL, NULL, &tv);
+        printf("here\n");
+        nready = select(maxfd + 1, &rset, NULL, NULL, NULL);
+        printf("%d\n", nready);
         if (nready == 0) {
-             printf("No response from clients in %ld seconds\n", tv.tv_sec);
             continue;
          } 
 
@@ -96,36 +95,7 @@ int main(void) {
             continue;
         }
 
-        /* read username from STDIN */
-        printf("What is your name?\n");
-        read(STDIN_FILENO, buf, sizeof(buf) + 1);
-        
-        strtok(buf,"\n"); //remove newline char from buffer
-        printf("Welcome, %s! ", buf);
-        printf("Awaiting opponent...\n");
-
-
-        /*next check if another client connected
-        1) print to STDOUT "You engage clientname"
-        2) call function to generate hitpoints and powermoves
-        */
-
-        if(clientCount == 2)
-        {/* 2 connections eshablished */
-        
-            printf("%s\n" "**", buf ,"enters the arena**");
-            printf("%s\n", "You engage", buf);
-            //keep track of whos in the match 
-            // read message decide what action to take
-            // then write to other client 
-            // turn variable 
-
-        }
-        
-
-    
-
-
+        //FD_ISSET returns 1 when a new connection is attempted
         if(FD_ISSET(listenfd, &rset)){
             //printf("a new client is connecting\n");
             len = sizeof(q); //accept connection of listenfd stream socket
@@ -137,18 +107,22 @@ int main(void) {
             if (clientfd > maxfd) {
                 maxfd = clientfd;
             }
-            //printf("connection from %s\n", inet_ntoa(q.sin_addr));
+            printf("connection from %s\n", inet_ntoa(q.sin_addr));
+            //TODO: Adjust addclient (DONE)
             head = addclient(head, clientfd, q.sin_addr);
-            clientCount++;
-            // add newly established connection
+            
         }
 
-        for(i = 0; i <= maxfd; i++) {
+        for(i = 0; i <= maxfd; i++) 
+        {
             if (FD_ISSET(i, &rset)) {
-                for (p = head; p != NULL; p = p->next) {
-                    if (p->fd == i) { //assigning client fd to i
+                for (p = head; p != NULL; p = p->next)
+                {
+                    if (p->fd == i) 
+                    { //assigning client fd to i
                         int result = handleclient(p, head);
-                        if (result == -1) {
+                        if (result == -1) 
+                        {
                             int tmp_fd = p->fd;
                             head = removeclient(head, p->fd);
                             FD_CLR(tmp_fd, &allset);
@@ -163,9 +137,66 @@ int main(void) {
     return 0;
 }
 
+int process_line(struct client *p, char *buf)
+{   
+    int initial = 0;
+    int nbytes;
+    int inbuf; //how many bytes currently in buffer?
+    int room; //how much room left in buffer
+    char *after; //pointer to position after the data in buf
+    int where; //location of network newline
+
+    while (1)
+    {
+        inbuf = 0;  //buffer is empty; has no bytes
+        room = sizeof(buf); //room == capacity of the whole buffer
+        after = buf; // start writing at beginning of buf
+
+        while ((nbytes = read(p->fd, after, room)) > 0)
+        {   
+            initial++;
+            inbuf = inbuf + nbytes;
+            where = find_network_newline(buf, inbuf);
+
+            if (where >= 0 && p->name == NULL)
+            {
+                buf[where] = '\n';
+                buf[where + 1] = '\0';
+
+                p->name = malloc(sizeof(buf));
+                strncpy(p->name, buf, sizeof(buf));
+            }
+            room = sizeof(buf) - inbuf;
+            after = buf + inbuf;
+
+        }
+        //socket is closed
+        if (initial == 0 && nbytes == 0)
+        {
+            return -1;
+        }
+
+    }
+    return 0;
+
+}
+
 int handleclient(struct client *p, struct client *top) {
+    //the first thing they write will be their name
+    //You will have to buffer the text that they enter
+    //Using code from lab9
     char buf[256];
     char outbuf[512];
+    if (p->name == NULL)
+    {
+        int process_line_result = process_line(p, buf);
+        char *message = "You are awaiting an opponent\r\n";
+        write(p->fd, message, strlen(message) + 1);
+        sprintf(outbuf, "%s has entered the arena!", p->name);
+        broadcast(top, outbuf, strlen(outbuf));
+        return process_line_result;
+    }
+   
     int len = read(p->fd, buf, sizeof(buf) - 1);
     if (len > 0) {
         buf[len] = '\0';
@@ -207,12 +238,12 @@ int bindandlisten(void) {
     r.sin_addr.s_addr = INADDR_ANY;
     r.sin_port = htons(PORT);
 
-    if (bind(listenfd, (struct sockaddr *)&r, sizeof r)) {
+    if (bind(listenfd, (struct sockaddr *)&r, sizeof(r))) {
         perror("bind");
         exit(1);
     }
 
-    if (listen(listenfd, 5)) {
+    if (listen(listenfd, SOMAXCONN)) {
         perror("listen");
         exit(1);
     }
@@ -221,17 +252,33 @@ int bindandlisten(void) {
 
 static struct client *addclient(struct client *top, int fd, struct in_addr addr) {
     struct client *p = malloc(sizeof(struct client));
+    p->name = NULL;
     if (!p) {
         perror("malloc");
         exit(1);
     }
-
-    printf("Adding client %s\n", inet_ntoa(addr));
-
     p->fd = fd;
     p->ipaddr = addr;
-    p->next = top;
-    top = p;
+    p->next = NULL;
+    
+    
+    char *intro_message = "What is your name? \r\n";
+    int write_check = write(fd, intro_message, strlen(intro_message) + 1);
+    if (write_check != strlen(intro_message) + 1)
+    {
+        perror("write(addclient)");
+        exit(EXIT_FAILURE);
+    }
+    //TODO: Tell the new client that they are awaiting an opponent
+    //TODO: Tell everyone else that someone new has entered the arena
+
+
+    //Adding to back of the client list`1
+    while (top->next != NULL)
+    {
+        top = top->next;
+    }
+    top->next = p;
     return top;
 }
 
@@ -263,6 +310,31 @@ static void broadcast(struct client *top, char *s, int size) {
     /* should probably check write() return value and perhaps remove client */
 }
 
+/*
+* Lab 9 Functions, used for processing 
+* full lines of text
+*/
+int find_network_newline(char *buf, int inbuf) {
+  // Step 1: write this function
+  int i = 0;
+  
+  while ((buf[i] != '\0') && (i < inbuf))
+  {
+    if (buf[i] == '\r')
+    { 
+      //network newline iff it is followed by '\n'
+      if (buf[i + 1] == '\n')
+      { 
+        //location of '\r'
+        return i;
+      }
+    }
+    i++;
+  }
+  return -1;
+}
+
+
 /* 
 ===========================================================================
  
@@ -276,7 +348,7 @@ static void broadcast(struct client *top, char *s, int size) {
 then they cause three times the damage of a regular attack.
  
  ============================================================================
- */
+ 
 // MAX_SCORE and MIN_SCORE macros defined above
 int generateHitPoints(){
 
@@ -346,5 +418,7 @@ void findMatch(struct client *a){
 
 
 }
+*/
+
 
 
