@@ -272,7 +272,10 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
     //TODO: Tell the new client that they are awaiting an opponent
     //TODO: Tell everyone else that someone new has entered the arena
 
-
+    if (top == NULL)
+    {
+        top = p;
+    }
     //Adding to back of the client list`1
     while (top->next != NULL)
     {
