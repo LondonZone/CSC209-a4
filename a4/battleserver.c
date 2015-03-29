@@ -51,8 +51,8 @@ int find_network_newline(char *buf, int inbuf);
 
 int bindandlisten(void);
 
-int main(void) 
-{   
+int main(void)
+{
     printf("%d\n", PORT);
     int clientfd, maxfd, nready;
     struct client *p; //used for access to list
@@ -64,8 +64,8 @@ int main(void)
 
     int i;
     printf("here\n");
-    // Create a new socket to allow communication 
-    int listenfd = bindandlisten(); 
+    // Create a new socket to allow communication
+    int listenfd = bindandlisten();
 
     // initialize allset and add listenfd to the
     // set of file descriptors passed into select
@@ -75,20 +75,20 @@ int main(void)
     // maxfd identifies how far into the set to search
     maxfd = listenfd;
 
-    while (1) 
+    while (1)
     {
         // make a copy of the set before we pass it into select
         printf("here\n");
         rset = allset;
         /*select will wait until an exceptional event occurs when tv is NULL*/
-    
-        
+
+
         printf("here\n");
         nready = select(maxfd + 1, &rset, NULL, NULL, NULL);
         printf("%d\n", nready);
         if (nready == 0) {
             continue;
-         } 
+         }
 
         if (nready == -1) {
             perror("select");
@@ -110,18 +110,18 @@ int main(void)
             printf("connection from %s\n", inet_ntoa(q.sin_addr));
             //TODO: Adjust addclient (DONE)
             head = addclient(head, clientfd, q.sin_addr);
-            
+
         }
 
-        for(i = 0; i <= maxfd; i++) 
+        for(i = 0; i <= maxfd; i++)
         {
             if (FD_ISSET(i, &rset)) {
                 for (p = head; p != NULL; p = p->next)
                 {
-                    if (p->fd == i) 
+                    if (p->fd == i)
                     { //assigning client fd to i
                         int result = handleclient(p, head);
-                        if (result == -1) 
+                        if (result == -1)
                         {
                             int tmp_fd = p->fd;
                             head = removeclient(head, p->fd);
@@ -138,7 +138,7 @@ int main(void)
 }
 
 int process_line(struct client *p, char *buf)
-{   
+{
     int initial = 0;
     int nbytes;
     int inbuf; //how many bytes currently in buffer?
@@ -153,7 +153,7 @@ int process_line(struct client *p, char *buf)
         after = buf; // start writing at beginning of buf
 
         while ((nbytes = read(p->fd, after, room)) > 0)
-        {   
+        {
             initial++;
             inbuf = inbuf + nbytes;
             where = find_network_newline(buf, inbuf);
@@ -184,7 +184,7 @@ int process_line(struct client *p, char *buf)
 int handleclient(struct client *p, struct client *top) {
     //the first thing they write will be their name
     //You will have to buffer the text that they enter
-    //Using code from lab9
+    //Using code from lab9.
     char buf[256];
     char outbuf[512];
     if (p->name == NULL)
@@ -196,7 +196,7 @@ int handleclient(struct client *p, struct client *top) {
         broadcast(top, outbuf, strlen(outbuf));
         return process_line_result;
     }
-   
+
     int len = read(p->fd, buf, sizeof(buf) - 1);
     if (len > 0) {
         buf[len] = '\0';
@@ -260,9 +260,9 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
     p->fd = fd;
     p->ipaddr = addr;
     p->next = NULL;
-    
-    
-    char *intro_message = "What is your name? \r\n";
+
+
+    const char *intro_message = "What is your name? \r\n";
     int write_check = write(fd, intro_message, strlen(intro_message) + 1);
     if (write_check != strlen(intro_message) + 1)
     {
@@ -311,20 +311,20 @@ static void broadcast(struct client *top, char *s, int size) {
 }
 
 /*
-* Lab 9 Functions, used for processing 
+* Lab 9 Functions, used for processing
 * full lines of text
 */
 int find_network_newline(char *buf, int inbuf) {
   // Step 1: write this function
   int i = 0;
-  
+
   while ((buf[i] != '\0') && (i < inbuf))
   {
     if (buf[i] == '\r')
-    { 
+    {
       //network newline iff it is followed by '\n'
       if (buf[i + 1] == '\n')
-      { 
+      {
         //location of '\r'
         return i;
       }
@@ -335,20 +335,19 @@ int find_network_newline(char *buf, int inbuf) {
 }
 
 
-/* 
+/*
 ===========================================================================
- 
-* Each player starts a match with between 20 and 30 hitpoints. 
+
+* Each player starts a match with between 20 and 30 hitpoints.
     (Note that hitpoints and powermoves are reset to random values on the start of a new match,
     independent of what the values may have been following their previous match.)
 
 * Each player starts a match with between one and three powermoves.
 * Damage from a regular attack is 2-6 hitpoints.
-* Powermoves have a 50% chance of missing. If they hit, 
+* Powermoves have a 50% chance of missing. If they hit,
 then they cause three times the damage of a regular attack.
- 
+
  ============================================================================
- 
 // MAX_SCORE and MIN_SCORE macros defined above
 int generateHitPoints(){
 
@@ -370,7 +369,7 @@ int generateAttacks(){
 // initialize powermoves in range 1-3
 int generatePowerMoves(){
 
-    int numMoves = 1 + (random() % 3)
+    int numMoves = 1 + (random() % 3);
     return numMoves;
 
 }
@@ -379,12 +378,13 @@ int generatePowerMoves(){
 void computeDamage(int attack_points, int hit_points, char buffer[]){
 
     //Powermoves have a 50% chance of missing.
-    int accuracy = 1 + (random() % 2)  
+    int accuracy = 1 + (random() % 2);
     int numPowermoves = generatePowerMoves();
     int damage = 0;
     char move[2];
 
-    if(move == "p") // if STDIN is a powermove
+    //NOTE: check entry is valid and discard invalid 
+    if(strncmp(move,"p",sizeof(move)) == 0) // if STDIN is a powermove
     { 
        if(numPowermoves >=1)
        {
@@ -401,9 +401,8 @@ void computeDamage(int attack_points, int hit_points, char buffer[]){
         }
 
     // regular attack
-    }else if(move == "a")
+    }else if(strncmp(move,"a",sizeof(move)) == 0)
     {
-
         hit_points -= attack_points; 
         printf("%s%s\n","you hit", buffer , "for", attack_points, "damage!");
 
@@ -412,13 +411,13 @@ void computeDamage(int attack_points, int hit_points, char buffer[]){
     
 }
 
+void displayMenu(){
+
+}
+
 
 void findMatch(struct client *a){
 
 
 
 }
-*/
-
-
-
