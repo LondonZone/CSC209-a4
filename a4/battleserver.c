@@ -31,13 +31,24 @@
     #define PORT 31300
 #endif
 
+struct message_manager {
+    char message_buffer[256];
+    int room;
+    char *after;
+    int inbuf;
+};
 
 struct client {
     int fd;
-    char *name;
+    char name[256];
     struct in_addr ipaddr;
     struct client *next;
+    struct message_manager message;
+    int in_battle;
+    int last_faced_fd;
+
 };
+
 
 
 static struct client *addclient(struct client *top, int fd, struct in_addr addr);
@@ -47,6 +58,7 @@ int handleclient(struct client *p, struct client *top);
 int generateHitPoints();
 void computeDamage(int attack_points, int hit_points, char buffer[]);
 int find_network_newline(char *buf, int inbuf);
+int process_message(struct client *p);
 
 
 int bindandlisten(void);
@@ -61,9 +73,8 @@ int main(void)
     struct sockaddr_in q;
     fd_set allset;
     fd_set rset;
-
     int i;
-    printf("here\n");
+
     // Create a new socket to allow communication
     int listenfd = bindandlisten();
 
@@ -78,12 +89,10 @@ int main(void)
     while (1)
     {
         // make a copy of the set before we pass it into select
-        printf("here\n");
         rset = allset;
         /*select will wait until an exceptional event occurs when tv is NULL*/
 
 
-        printf("here\n");
         nready = select(maxfd + 1, &rset, NULL, NULL, NULL);
         printf("%d\n", nready);
         if (nready == 0) {
@@ -137,84 +146,102 @@ int main(void)
     return 0;
 }
 
-int process_line(struct client *p, char *buf)
+/*
+* Does buffering
+* Returns -1 upon an error or on socket being closed or message too big
+* otherwise 0
+*/
+int process_message(struct client *p)
 {
-    int initial = 0;
-    int nbytes;
-    int inbuf; //how many bytes currently in buffer?
-    int room; //how much room left in buffer
-    char *after; //pointer to position after the data in buf
-    int where; //location of network newline
-
+    int where;
+    int first_iteration = 0;
+    int nbytes; 
+    int return_value = 0;
     while (1)
-    {
-        inbuf = 0;  //buffer is empty; has no bytes
-        room = sizeof(buf); //room == capacity of the whole buffer
-        after = buf; // start writing at beginning of buf
-
-        while ((nbytes = read(p->fd, after, room)) > 0)
+    {   
+        nbytes = read(p->fd, (p->message).after, (p->message).room);
+        if (nbytes <= 0)
         {
-            initial++;
-            inbuf = inbuf + nbytes;
-            where = find_network_newline(buf, inbuf);
-
-            if (where >= 0 && p->name == NULL)
-            {
-                buf[where] = '\n';
-                buf[where + 1] = '\0';
-
-                p->name = malloc(sizeof(buf));
-                strncpy(p->name, buf, sizeof(buf));
-            }
-            room = sizeof(buf) - inbuf;
-            after = buf + inbuf;
-
+            break;
         }
-        //socket is closed
-        if (initial == 0 && nbytes == 0)
+        first_iteration = 1;
+        (p->message).inbuf = (p->message).inbuf + nbytes;
+        where = find_network_newline((p->message).message_buffer, (p->message).inbuf);
+        if (where >= 0)
+        {
+            (p->message).message_buffer[where] = '\n';
+            (p->message).message_buffer[where + 1] = '\0';
+
+
+            if ((p->name)[0] == '\0')
+            {
+                (p->message).message_buffer[where] = '\0';
+                strncpy(p->name, (p->message).message_buffer, sizeof(p->message).message_buffer);
+                return_value = 1;
+            }
+            else
+            {
+                return_value = 2;
+            }
+            (p->message).inbuf -= where + 2;
+            memmove((p->message).message_buffer, (p->message).message_buffer + where + 2, sizeof(p->message).message_buffer);
+        }
+        (p->message).room = sizeof((p->message).message_buffer) - (p->message).inbuf;
+        (p->message).after = (p->message).message_buffer + (p->message).inbuf;
+        if (return_value == 1 || return_value == 2)
+        {
+            break;
+        }
+
+        //The user entered more than 256 characters for a message
+        //They will be deleted from the client list because this is a violation
+        if ((p->message).room == 0 && where < 0)
         {
             return -1;
         }
 
     }
-    return 0;
 
-}
-
-int handleclient(struct client *p, struct client *top) {
-    //the first thing they write will be their name
-    //You will have to buffer the text that they enter
-    //Using code from lab9.
-    char buf[256];
-    char outbuf[512];
-    if (p->name == NULL)
+    if (first_iteration == 0)
     {
-        int process_line_result = process_line(p, buf);
+        return -1;
+    }
+
+    return return_value;
+}
+/*
+* Returns the opponents file descriptor if an opponent is found
+* Otherwise, returns 0
+
+int look_for_opponent(struct client *top, struct client *p)
+{
+    for ()
+}
+*/
+
+int handleclient(struct client *p, struct client *top) 
+{   
+    int process_message_result = process_message(p);
+    //Error or socket was closed, delete the client
+    if (process_message_result == -1)
+    {
+        printf("Disconnect from %s\n", inet_ntoa(p->ipaddr));
+        return process_message_result;
+    }
+
+    if (process_message_result == 1)
+    {
         char *message = "You are awaiting an opponent\r\n";
         write(p->fd, message, strlen(message) + 1);
-        sprintf(outbuf, "%s has entered the arena!", p->name);
-        broadcast(top, outbuf, strlen(outbuf));
-        return process_line_result;
+        char outbuf[512];
+       // sprintf(outbuf, "%s has joined the arena\n", p->name);
+        broadcast(top, outbuf, strlen(outbuf) + 1);
     }
 
-    int len = read(p->fd, buf, sizeof(buf) - 1);
-    if (len > 0) {
-        buf[len] = '\0';
-        printf("Received %d bytes: %s", len, buf);
-        sprintf(outbuf, "%s says: %s", inet_ntoa(p->ipaddr), buf); //print to buffer
-        broadcast(top, outbuf, strlen(outbuf));
-        return 0;
-    } else if (len == 0) {
-        // socket is closed
-        printf("Disconnect from %s\n", inet_ntoa(p->ipaddr));
-        sprintf(outbuf, "Goodbye %s\r\n", inet_ntoa(p->ipaddr));
-        broadcast(top, outbuf, strlen(outbuf));
-        return -1;
-    } else { // shouldn't happen
-        perror("read");
-        return -1;
-    }
+    return process_message_result;
 }
+
+
 
  /* bind and listen, abort on error
   * returns FD of listening socket
@@ -252,14 +279,19 @@ int bindandlisten(void) {
 
 static struct client *addclient(struct client *top, int fd, struct in_addr addr) {
     struct client *p = malloc(sizeof(struct client));
-    p->name = NULL;
     if (!p) {
         perror("malloc");
         exit(1);
     }
+    (p->message).inbuf = 0;
+    (p->message).after = (p->message).message_buffer;
+    (p->message).room = sizeof((p->message).message_buffer);
     p->fd = fd;
     p->ipaddr = addr;
     p->next = NULL;
+    p->in_battle = 0;
+    p->last_faced_fd = 0;
+    (p->name)[0] = '\0';
 
 
     const char *intro_message = "What is your name? \r\n";
@@ -269,12 +301,11 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
         perror("write(addclient)");
         exit(EXIT_FAILURE);
     }
-    //TODO: Tell the new client that they are awaiting an opponent
-    //TODO: Tell everyone else that someone new has entered the arena
 
     if (top == NULL)
     {
         top = p;
+        return top;
     }
     //Adding to back of the client list`1
     while (top->next != NULL)
