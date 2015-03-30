@@ -59,6 +59,7 @@ int generateHitPoints();
 void computeDamage(int attack_points, int hit_points, char buffer[]);
 int find_network_newline(char *buf, int inbuf);
 int process_message(struct client *p);
+int look_for_opponent(struct client *top, struct client *p);
 
 
 int bindandlisten(void);
@@ -210,14 +211,26 @@ int process_message(struct client *p)
     return return_value;
 }
 /*
-* Returns the opponents file descriptor if an opponent is found
+* Returns 1 if an opponent is found
 * Otherwise, returns 0
-
-int look_for_opponent(struct client *top, struct client *p)
-{
-    for ()
-}
 */
+int look_for_opponent(struct client *top, struct client *p)
+{   
+    struct client *iterator;
+    for (iterator = top; iterator != NULL; iterator = iterator -> next)
+    {
+        if (iterator->in_battle == 0 && iterator->last_faced_fd != p->fd && (iterator->name)[0] != '\0')
+        {
+            iterator->in_battle = 1;
+            p->in_battle = 1;
+            iterator->last_faced_fd = p->fd;
+            p->fd = iterator->fd;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 
 int handleclient(struct client *p, struct client *top) 
 {   
@@ -234,8 +247,13 @@ int handleclient(struct client *p, struct client *top)
         char *message = "You are awaiting an opponent\r\n";
         write(p->fd, message, strlen(message) + 1);
         char outbuf[512];
-       // sprintf(outbuf, "%s has joined the arena\n", p->name);
+        sprintf(outbuf, "%s has joined the arena\n", p->name);
         broadcast(top, outbuf, strlen(outbuf) + 1);
+        int search_result = look_for_opponent(top, p);
+        if (search_result == 1)
+        {
+
+        }
     }
 
     return process_message_result;
