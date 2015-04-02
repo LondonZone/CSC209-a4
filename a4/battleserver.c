@@ -31,21 +31,36 @@
     #define PORT 31300
 #endif
 
+#define MAX_SCORE 30
+#define MIN_SCORE 20
 struct message_manager {
     char message_buffer[256];
     int room;
     char *after;
     int inbuf;
+
+    char command_buffer[60];
+    int command_room;
+    char *command_after;
+    int command_inbuf;
+};
+
+struct match {
+    struct client *currently_facing;
+    int past_fd;
+    int in_match;
+    int hp;
+    int powermoves;
 };
 
 struct client {
     int fd;
+    int turn;
     char name[256];
     struct in_addr ipaddr;
     struct client *next;
     struct message_manager message;
-    int in_battle;
-    int last_faced_fd;
+    struct match combat;
 
 };
 
@@ -60,9 +75,12 @@ void computeDamage(int attack_points, int hit_points, char buffer[]);
 int find_network_newline(char *buf, int inbuf);
 int process_message(struct client *p);
 int look_for_opponent(struct client *top, struct client *p);
-
-
+void print_stats(struct client *p1, struct client *p2);
+void print_options(struct client *p1, struct client *p2);
+int generatehp();
+int generatepowermoves();
 int bindandlisten(void);
+int read_and_discard(struct client *p);
 
 int main(void)
 {
@@ -160,7 +178,9 @@ int process_message(struct client *p)
     int return_value = 0;
     while (1)
     {   
+
         nbytes = read(p->fd, (p->message).after, (p->message).room);
+
         if (nbytes <= 0)
         {
             break;
@@ -181,7 +201,8 @@ int process_message(struct client *p)
                 return_value = 1;
             }
             else
-            {
+            {   
+                
                 return_value = 2;
             }
             (p->message).inbuf -= where + 2;
@@ -204,36 +225,87 @@ int process_message(struct client *p)
     }
 
     if (first_iteration == 0)
-    {
+    {   
+
         return -1;
     }
 
     return return_value;
 }
-/*
-* Returns 1 if an opponent is found
-* Otherwise, returns 0
-*/
-int look_for_opponent(struct client *top, struct client *p)
-{   
-    struct client *iterator;
-    for (iterator = top; iterator != NULL; iterator = iterator -> next)
+
+
+void print_stats(struct client *p1, struct client *p2)
+{
+    char outbuf[512];
+
+    sprintf(outbuf, "Your hitpoints: %d\r\n", (p1->combat).hp);
+    write(p1->fd, outbuf, strlen(outbuf) + 1);
+    sprintf(outbuf, "Your powermoves: %d\n\r\n", (p1->combat).powermoves);
+    write(p1->fd, outbuf, strlen(outbuf) + 1);
+    sprintf(outbuf, "%s's hitpoints: %d\r\n", p2->name, (p2->combat).hp);
+    write(p1->fd, outbuf, strlen(outbuf) + 1);
+
+    sprintf(outbuf, "Your hitpoints: %d\r\n", (p2->combat).hp);
+    write(p2->fd, outbuf, strlen(outbuf) + 1);
+    sprintf(outbuf, "Your powermoves: %d\n\r\n", (p2->combat).powermoves);
+    write(p2->fd, outbuf, strlen(outbuf) + 1);
+    sprintf(outbuf, "%s's hitpoints: %d\r\n", p1->name, (p1->combat).hp);
+    write(p2->fd, outbuf, strlen(outbuf) + 1);
+}
+
+void print_options(struct client *p1, struct client *p2)
+{
+    char outbuf[512];
+
+    if (p1->turn == 1)
     {
-        if (iterator->in_battle == 0 && iterator->last_faced_fd != p->fd && (iterator->name)[0] != '\0')
+        sprintf(outbuf, "\n(a)ttack\r\n");
+        write(p1->fd, outbuf, strlen(outbuf) + 1);
+        if ((p1->combat).powermoves > 0)
         {
-            iterator->in_battle = 1;
-            p->in_battle = 1;
-            iterator->last_faced_fd = p->fd;
-            p->fd = iterator->fd;
-            return 1;
+            sprintf(outbuf, "(p)owermove\r\n");
+            write(p1->fd, outbuf, strlen(outbuf) + 1);
         }
+        sprintf(outbuf, "(s)peak something\r\n");
+        write(p1->fd, outbuf, strlen(outbuf) + 1);
+        sprintf(outbuf, "waiting for %s to strike...\n\r\n", p1->name);
+        write(p2->fd, outbuf, strlen(outbuf) + 1);
     }
-    return 0;
+    else
+    {   
+        sprintf(outbuf, "\n(a)ttack\r\n");
+        write(p2->fd, outbuf, strlen(outbuf) + 1);
+        if ((p2->combat).powermoves > 0)
+        {
+            sprintf(outbuf, "(p)owermove\r\n");
+            write(p2->fd, outbuf, strlen(outbuf) + 1);
+        }
+        sprintf(outbuf, "(s)peak something\r\n");
+        write(p2->fd, outbuf, strlen(outbuf) + 1);
+        sprintf(outbuf, "waiting for %s to strike...\n\r\n", p2->name);
+        write(p1->fd, outbuf, strlen(outbuf) + 1);
+    }
+}
+
+int process_command(struct client *p)
+{
+
 }
 
 
 int handleclient(struct client *p, struct client *top) 
-{   
+{   char outbuf[512];
+    //Process their commands since they are facing someone and it is their turn
+    if ((p->combat).currently_facing != NULL && p->turn == 1)
+    {
+        return process_command(p);
+    }
+
+    if (p->turn == 0 && p->name[0] != '\0')
+    {
+        return read_and_discard(p);
+    }
+
     int process_message_result = process_message(p);
     //Error or socket was closed, delete the client
     if (process_message_result == -1)
@@ -246,19 +318,86 @@ int handleclient(struct client *p, struct client *top)
     {
         char *message = "You are awaiting an opponent\r\n";
         write(p->fd, message, strlen(message) + 1);
-        char outbuf[512];
-        sprintf(outbuf, "%s has joined the arena\n", p->name);
+        
+        sprintf(outbuf, "%s has joined the arena\r\n", p->name);
         broadcast(top, outbuf, strlen(outbuf) + 1);
         int search_result = look_for_opponent(top, p);
         if (search_result == 1)
-        {
-
+        {   
+            print_stats(p, (p->combat).currently_facing);
+            print_options(p, (p->combat).currently_facing);
         }
     }
 
     return process_message_result;
 }
 
+int read_and_discard(struct client *p)
+{
+    int first_iteration = 0;
+    int nbytes; 
+    
+
+    while (1)
+    {
+        nbytes = read(p->fd, (p->message).after, (p->message).room);
+        if (nbytes <=0)
+        {
+            break;
+        }
+        first_iteration = 1;
+        (p->message).inbuf = (p->message).inbuf + nbytes;
+
+        (p->message).room = sizeof((p->message).message_buffer) - (p->message).inbuf;
+        if ((p->message).room > 0)
+        {
+            (p->message).room = sizeof((p->message).message_buffer);
+            (p->message).after = (p->message).message_buffer;
+            (p->message).inbuf = 0;
+            break;
+        }
+        (p->message).room = sizeof((p->message).message_buffer);
+        (p->message).after = (p->message).message_buffer;
+        (p->message).inbuf = 0;
+
+    }   
+    if (first_iteration == 0)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+int look_for_opponent(struct client *top, struct client *p)
+{   
+    char message[300];
+    struct client *iterator;
+    for (iterator = top; iterator != NULL; iterator = iterator->next)
+    {
+        if ((iterator->combat).in_match == 0 && (iterator->combat).past_fd != (p->combat).past_fd && (iterator->name)[0] != '\0' && iterator->fd != p->fd)
+        {
+            (iterator->combat).in_match = 1;
+            (p->combat).in_match = 1;
+            (iterator->combat).currently_facing = p;
+            (p->combat).currently_facing = iterator;
+            (iterator->combat).past_fd = p->fd;
+            (p->combat).past_fd = iterator->fd;
+            (iterator->combat).hp = generatehp();
+            (p->combat).hp = generatehp();
+            (iterator->combat).powermoves = generatepowermoves();
+            (p->combat).powermoves = generatepowermoves();
+            p->turn = 1;
+            sprintf(message, "You engage %s\r\n", p->name);
+            write(iterator->fd, message, strlen(message) + 1);
+            sprintf(message, "You engage %s\r\n", iterator->name);
+            write(p->fd, message, strlen(message) + 1);
+            return 1;
+        }
+    }
+    return 0;
+}
 
 
  /* bind and listen, abort on error
@@ -305,11 +444,15 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
     (p->message).after = (p->message).message_buffer;
     (p->message).room = sizeof((p->message).message_buffer);
     p->fd = fd;
+    p->turn = 0;
     p->ipaddr = addr;
     p->next = NULL;
-    p->in_battle = 0;
-    p->last_faced_fd = 0;
     (p->name)[0] = '\0';
+    (p->combat).currently_facing = NULL;
+    (p->combat).past_fd = p->fd;
+    (p->combat).in_match = 0;
+    (p->combat).hp = 0;
+    (p->combat).powermoves = 0;
 
 
     const char *intro_message = "What is your name? \r\n";
@@ -354,9 +497,11 @@ static struct client *removeclient(struct client *top, int fd) {
 }
 
 
-static void broadcast(struct client *top, char *s, int size) {
+static void broadcast(struct client *top, char *s, int size) 
+{
     struct client *p;
-    for (p = top; p; p = p->next) {
+    for (p = top; p; p = p->next)
+    {
         write(p->fd, s, size);
     }
     /* should probably check write() return value and perhaps remove client */
@@ -366,8 +511,8 @@ static void broadcast(struct client *top, char *s, int size) {
 * Lab 9 Functions, used for processing
 * full lines of text
 */
-int find_network_newline(char *buf, int inbuf) {
-  // Step 1: write this function
+int find_network_newline(char *buf, int inbuf) 
+{
   int i = 0;
 
   while ((buf[i] != '\0') && (i < inbuf))
@@ -386,6 +531,20 @@ int find_network_newline(char *buf, int inbuf) {
   return -1;
 }
 
+int generatehp()
+{
+
+    int randomnumber = random() % (MAX_SCORE - MIN_SCORE + 1) + MIN_SCORE;
+    return randomnumber;
+}
+
+int generatepowermoves()
+{
+
+    int numMoves = 1 + (random() % 3);
+    return numMoves;
+
+}
 
 /*
 ===========================================================================
@@ -418,13 +577,6 @@ int generateAttacks(){
 
 }
 
-// initialize powermoves in range 1-3
-int generatePowerMoves(){
-
-    int numMoves = 1 + (random() % 3);
-    return numMoves;
-
-}
 
 // Compute Damage from attack
 void computeDamage(int attack_points, int hit_points, char buffer[]){
@@ -460,18 +612,5 @@ void computeDamage(int attack_points, int hit_points, char buffer[]){
 
     }
     
-    
-}
-
-void displayMenu(){
-
-}
-
-
-void findMatch(struct client *a){
-
-
-
-}
 
 */
