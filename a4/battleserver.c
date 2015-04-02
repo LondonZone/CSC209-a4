@@ -222,6 +222,8 @@ int process_message(struct client *p)
             return -1;
         }
 
+        break;
+
     }
 
     if (first_iteration == 0)
@@ -307,15 +309,57 @@ int process_command(struct client *p)
     int where;
     int first_iteration = 0;
     int nbytes;
+    char outbuf[512];
 
     while (1)
     {
-        nbytes = read(p->fd, (p->message).after, (p->message).room);
+        nbytes = read(p->fd, (p->message).command_after, (p->message).command_room);
         if (nbytes <= 0)
         {
             break;
         }
+        first_iteration = 1;
+        (p->message).command_inbuf = (p->message).command_inbuf + nbytes;
+        where = find_command((p->message).command_buffer, (p->message).command_inbuf);
+
+        if (where >= 0)
+        {
+            if ((p->message).command_buffer[where] == 'a')
+            {
+                //Do an attack thingy
+            }
+            else if ((p->message).command_buffer[where] == 'p' && (p->combat).powermoves > 0)
+            {
+                //Do a powermove thingy
+            }
+            else
+            {
+                (p->message).inbuf = 0;
+                (p->message).room = sizeof((p->message).message_buffer);
+                (p->message).after = (p->message).message_buffer;
+
+                int process_result = process_message(p);
+            }
+            (p->message).command_inbuf = 0;
+            (p->message).command_room = sizeof((p->message).command_buffer);
+            (p->message).command_after = (p->message).command_buffer;
+
+        }
+
+        if ((p->message).command_room == 0 && where == -1)
+        {
+            return -1;
+        }
+
+
     }
+
+    if (first_iteration == 0)
+    {
+        return -1;
+    }
+
+    return 0;
 }
 
 
@@ -345,7 +389,7 @@ int handleclient(struct client *p, struct client *top)
         char *message = "You are awaiting an opponent\r\n";
         write(p->fd, message, strlen(message) + 1);
         
-        sprintf(outbuf, "%s has joined the arena\r\n", p->name);
+        sprintf(outbuf, "\n%s has joined the arena\r\n", p->name);
         broadcast(top, outbuf, strlen(outbuf) + 1);
         int search_result = look_for_opponent(top, p);
         if (search_result == 1)
@@ -469,6 +513,10 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
     (p->message).inbuf = 0;
     (p->message).after = (p->message).message_buffer;
     (p->message).room = sizeof((p->message).message_buffer);
+
+    (p->message).command_inbuf = 0;
+    (p->message).command_after = (p->message).command_buffer;
+    (p->message).command_room = sizeof((p->message).command_buffer);
     p->fd = fd;
     p->turn = 0;
     p->ipaddr = addr;
