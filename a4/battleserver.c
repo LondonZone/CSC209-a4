@@ -287,9 +287,35 @@ void print_options(struct client *p1, struct client *p2)
     }
 }
 
+int find_command(char *buf, int inbuf)
+{
+    int i = 0;
+    while ((buf[i] !='\0') && (i < inbuf))
+    {
+        if (buf[i] == 'a' || buf[i] == 'p' || buf[i] == 's')
+        {
+            return i;
+        } 
+        i++;   
+    }
+    return -1;
+
+}
+
 int process_command(struct client *p)
 {
+    int where;
+    int first_iteration = 0;
+    int nbytes;
 
+    while (1)
+    {
+        nbytes = read(p->fd, (p->message).after, (p->message).room);
+        if (nbytes <= 0)
+        {
+            break;
+        }
+    }
 }
 
 
