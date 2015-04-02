@@ -55,6 +55,7 @@ struct match {
 
 struct client {
     int fd;
+    int must_process;
     int turn;
     char name[256];
     struct in_addr ipaddr;
@@ -202,7 +203,11 @@ int process_message(struct client *p)
             }
             else
             {   
-                
+                char outbuf[512];
+                sprintf(outbuf, "%s takes a break to tell you: \r\n", p->name);
+                write(((p->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+                strncpy(outbuf, (p->message).message_buffer, sizeof(p->message).message_buffer);
+                write(((p->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
                 return_value = 2;
             }
             (p->message).inbuf -= where + 2;
@@ -289,12 +294,12 @@ void print_options(struct client *p1, struct client *p2)
     }
 }
 
-int find_command(char *buf, int inbuf)
+int find_command(char *buf, int inbuf, int powermoves_left)
 {
     int i = 0;
     while ((buf[i] !='\0') && (i < inbuf))
     {
-        if (buf[i] == 'a' || buf[i] == 'p' || buf[i] == 's')
+        if ((buf[i] == 'a') || (buf[i] == 'p' && powermoves_left == 1) || (buf[i] == 's'))
         {
             return i;
         } 
@@ -303,13 +308,57 @@ int find_command(char *buf, int inbuf)
     return -1;
 
 }
+int normal_attack()
+{
+    return (random() % 5) + 2;
+}
+
+int compute_damage(struct client *p1, struct client *p2, int attack_type)
+{   
+    char outbuf[512];
+    int attack_damage = normal_attack();
+    p1->turn = 0;
+    //Normal attack
+    if (attack_type == 0)
+    {
+        sprintf(outbuf, "\nYou hit %s for %d damage!\r\n", p2->name, attack_damage);
+        write(p1->fd, outbuf, strlen(outbuf) + 1);
+        sprintf(outbuf, "\n%s hits you for %d damage!\r\n", p1->name, attack_damage);
+        write(p2->fd, outbuf, strlen(outbuf) + 1);
+        (p2->combat).hp = (p2->combat).hp - attack_damage;
+        if ((p2->combat).hp  <= 0)
+        {
+            sprintf(outbuf, "%s gives up. You win!\r\n", p2->name);
+            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            sprintf(outbuf, "You are no match for %s. You scurry away...\r\n", p1->name);
+            write(p2->fd, outbuf, strlen(outbuf) + 1);
+
+            return 0;
+        }
+        p2->turn = 1;
+        print_stats(p1, p2);
+        print_options(p1, p2);
+    }
+    //Power attack
+    else
+    {
+
+    }
+    return 0;
+}
 
 int process_command(struct client *p)
 {
     int where;
+    int attack_type;
     int first_iteration = 0;
     int nbytes;
     char outbuf[512];
+    int powermoves_left = 0;
+    if ((p->combat).powermoves > 0)
+    {
+        int powermoves_left = 1;
+    }
 
     while (1)
     {
@@ -320,25 +369,32 @@ int process_command(struct client *p)
         }
         first_iteration = 1;
         (p->message).command_inbuf = (p->message).command_inbuf + nbytes;
-        where = find_command((p->message).command_buffer, (p->message).command_inbuf);
+        where = find_command((p->message).command_buffer, (p->message).command_inbuf, powermoves_left);
 
         if (where >= 0)
         {
             if ((p->message).command_buffer[where] == 'a')
-            {
-                //Do an attack thingy
+            {   
+                attack_type = 0;
+                compute_damage(p, ((p->combat).currently_facing), attack_type);
+
             }
             else if ((p->message).command_buffer[where] == 'p' && (p->combat).powermoves > 0)
             {
                 //Do a powermove thingy
+                attack_type = 1;
+                compute_damage(p, ((p->combat).currently_facing), attack_type);
             }
             else
             {
                 (p->message).inbuf = 0;
                 (p->message).room = sizeof((p->message).message_buffer);
                 (p->message).after = (p->message).message_buffer;
+                sprintf(outbuf, "\nSpeak: \r\n");
+                write(p->fd, outbuf, strlen(outbuf) + 1);
+                //int process_result = process_message(p);
+                p->must_process = 1;
 
-                int process_result = process_message(p);
             }
             (p->message).command_inbuf = 0;
             (p->message).command_room = sizeof((p->message).command_buffer);
@@ -351,7 +407,7 @@ int process_command(struct client *p)
             return -1;
         }
 
-
+        break;
     }
 
     if (first_iteration == 0)
@@ -365,6 +421,16 @@ int process_command(struct client *p)
 
 int handleclient(struct client *p, struct client *top) 
 {   char outbuf[512];
+    if (p->must_process == 1)
+    {
+        int speak_result = process_message(p);
+        if (speak_result == 2)
+        {
+            p->must_process = 0;
+        }
+        return speak_result;
+
+    }
     //Process their commands since they are facing someone and it is their turn
     if ((p->combat).currently_facing != NULL && p->turn == 1)
     {
@@ -398,6 +464,7 @@ int handleclient(struct client *p, struct client *top)
             print_options(p, (p->combat).currently_facing);
         }
     }
+
 
     return process_message_result;
 }
@@ -510,6 +577,8 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
         perror("malloc");
         exit(1);
     }
+    p->must_process = 0;
+
     (p->message).inbuf = 0;
     (p->message).after = (p->message).message_buffer;
     (p->message).room = sizeof((p->message).message_buffer);
@@ -617,7 +686,6 @@ int generatepowermoves()
 
     int numMoves = 1 + (random() % 3);
     return numMoves;
-
 }
 
 /*
