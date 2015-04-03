@@ -361,7 +361,8 @@ int compute_damage(struct client *top, struct client *p1, struct client *p2, int
         print_options(p1, p2);
     }
     else
-    {
+    {   
+        (p1->combat).powermoves = (p1->combat).powermoves - 1;
         int accuracy = (random() % 2);
         if (accuracy == 1)
         {
@@ -692,10 +693,11 @@ struct client *removeclient(struct client *top, int fd) {
     // Now, p points to (1) top, or (2) a pointer to another client
     // This avoids a special case for removing the head of the list
     if (*p) {
+        char outbuf[512];
         if (((*p)->combat).in_match == 1)
         {   
             
-            char outbuf[512];
+            
             sprintf(outbuf, "\n--%s dropped. You win!\n\r\n", (*p)->name);
             write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
             (((*p)->combat).currently_facing)->turn = 0;
@@ -703,8 +705,6 @@ struct client *removeclient(struct client *top, int fd) {
             ((((*p)->combat).currently_facing)->combat).past_fd = 0;
             sprintf(outbuf, "\nAwaiting next opponent...\r\n");
             write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
-            sprintf(outbuf, "\n**%s leaves **\r\n", (*p)->name);
-            broadcast(top, outbuf, strlen(outbuf) + 1);
             int look_result = look_for_opponent(top, ((((*p)->combat).currently_facing)));
             if (look_result == 1)
             {
@@ -712,6 +712,8 @@ struct client *removeclient(struct client *top, int fd) {
                 print_options(((*p)->combat).currently_facing, ( (((*p)->combat).currently_facing)->combat).currently_facing);
             }
         }
+        sprintf(outbuf, "\n**%s leaves **\r\n", (*p)->name);
+        broadcast(top, outbuf, strlen(outbuf) + 1);
         struct client *t = (*p)->next;
         printf("Removing client %d %s\n", fd, inet_ntoa((*p)->ipaddr));
         free(*p);
