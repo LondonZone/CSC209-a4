@@ -67,9 +67,9 @@ struct client {
 
 
 
-static struct client *addclient(struct client *top, int fd, struct in_addr addr);
-static struct client *removeclient(struct client *top, int fd);
-static void broadcast(struct client *top, char *s, int size);
+struct client *addclient(struct client *top, int fd, struct in_addr addr);
+struct client *removeclient(struct client *top, int fd);
+void broadcast(struct client *top, char *s, int size);
 int handleclient(struct client *p, struct client *top);
 int generateHitPoints();
 void computeDamage(int attack_points, int hit_points, char buffer[]);
@@ -82,6 +82,9 @@ int generatehp();
 int generatepowermoves();
 int bindandlisten(void);
 int read_and_discard(struct client *p);
+struct client *move_to_back(struct client *top, struct client *p);
+int compute_damage(struct client *top, struct client *p1, struct client *p2, int attack_type);
+int process_command(struct client *p, struct client *top);
 
 int main(void)
 {
@@ -139,6 +142,7 @@ int main(void)
             printf("connection from %s\n", inet_ntoa(q.sin_addr));
             //TODO: Adjust addclient (DONE)
             head = addclient(head, clientfd, q.sin_addr);
+
 
         }
 
@@ -299,7 +303,7 @@ int find_command(char *buf, int inbuf, int powermoves_left)
     int i = 0;
     while ((buf[i] !='\0') && (i < inbuf))
     {
-        if ((buf[i] == 'a') || (buf[i] == 'p' && powermoves_left == 1) || (buf[i] == 's'))
+        if ((buf[i] == 'a') || (buf[i] == 'p' && powermoves_left > 0) || (buf[i] == 's'))
         {
             return i;
         } 
@@ -313,7 +317,8 @@ int normal_attack()
     return (random() % 5) + 2;
 }
 
-int compute_damage(struct client *p1, struct client *p2, int attack_type)
+
+int compute_damage(struct client *top, struct client *p1, struct client *p2, int attack_type)
 {   
     char outbuf[512];
     int attack_damage = normal_attack();
@@ -327,38 +332,99 @@ int compute_damage(struct client *p1, struct client *p2, int attack_type)
         write(p2->fd, outbuf, strlen(outbuf) + 1);
         (p2->combat).hp = (p2->combat).hp - attack_damage;
         if ((p2->combat).hp  <= 0)
-        {
+        {   
             sprintf(outbuf, "%s gives up. You win!\r\n", p2->name);
             write(p1->fd, outbuf, strlen(outbuf) + 1);
             sprintf(outbuf, "You are no match for %s. You scurry away...\r\n", p1->name);
             write(p2->fd, outbuf, strlen(outbuf) + 1);
-
+            (p1->combat).in_match = 0;
+            (p2->combat).in_match = 0;
+            sprintf(outbuf, "\nAwaiting next opponent...\r\n");
+            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            int search_result_one = look_for_opponent(top, p1);
+            int search_result_two = look_for_opponent(top, p2);
+            if (search_result_one == 1)
+            {
+                print_stats(p1, (p1->combat).currently_facing);
+                print_options(p1, (p1->combat).currently_facing);
+            }
+            if (search_result_two == 1)
+            {
+                print_stats(p2, (p2->combat).currently_facing);
+                print_options(p2, (p2->combat).currently_facing);
+            }
             return 0;
         }
         p2->turn = 1;
         print_stats(p1, p2);
         print_options(p1, p2);
     }
-    //Power attack
     else
     {
-
+        int accuracy = (random() % 2);
+        if (accuracy == 1)
+        {
+            int power_damage = 3 * attack_damage;
+            sprintf(outbuf, "\nYou hit %s for %d damage\r\n", p2->name, power_damage);
+            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            sprintf(outbuf, "\n%s hit you for %d damage\r\n", p1->name, power_damage);
+            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            (p2->combat).hp = (p2->combat).hp - power_damage;
+            if ((p2->combat).hp  <= 0)
+            {
+                sprintf(outbuf, "%s gives up. You win!\r\n", p2->name);
+                write(p1->fd, outbuf, strlen(outbuf) + 1);
+                sprintf(outbuf, "You are no match for %s. You scurry away...\r\n", p1->name);
+                write(p2->fd, outbuf, strlen(outbuf) + 1);
+                (p1->combat).in_match = 0;
+                (p2->combat).in_match = 0;
+                sprintf(outbuf, "\nAwaiting next opponent...\r\n");
+                write(p1->fd, outbuf, strlen(outbuf) + 1);
+                write(p2->fd, outbuf, strlen(outbuf) + 1);
+                int search_result_one = look_for_opponent(top, p1);
+                int search_result_two = look_for_opponent(top, p2);
+                if (search_result_one == 1)
+                {
+                    print_stats(p1, (p1->combat).currently_facing);
+                    print_options(p1, (p1->combat).currently_facing);
+                }
+                if (search_result_two == 1)
+                {
+                    print_stats(p2, (p2->combat).currently_facing);
+                    print_options(p2, (p2->combat).currently_facing);
+                }
+                return 0;
+            }
+            else
+            {   
+                p2->turn = 1;
+                print_stats(p1, p2);
+                print_options(p1, p2);
+            } 
+        }
+        else
+        {
+            sprintf(outbuf, "\nYou missed!\r\n");
+            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            sprintf(outbuf, "\n%s missed you!\r\n", p1->name);
+            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            p2->turn = 1;
+            print_stats(p1, p2);
+            print_options(p1, p2);
+        }
     }
     return 0;
 }
 
-int process_command(struct client *p)
+int process_command(struct client *p, struct client *top)
 {
     int where;
     int attack_type;
     int first_iteration = 0;
     int nbytes;
     char outbuf[512];
-    int powermoves_left = 0;
-    if ((p->combat).powermoves > 0)
-    {
-        int powermoves_left = 1;
-    }
+    
 
     while (1)
     {
@@ -369,21 +435,20 @@ int process_command(struct client *p)
         }
         first_iteration = 1;
         (p->message).command_inbuf = (p->message).command_inbuf + nbytes;
-        where = find_command((p->message).command_buffer, (p->message).command_inbuf, powermoves_left);
+        where = find_command((p->message).command_buffer, (p->message).command_inbuf, (p->combat).powermoves);
 
         if (where >= 0)
         {
             if ((p->message).command_buffer[where] == 'a')
             {   
                 attack_type = 0;
-                compute_damage(p, ((p->combat).currently_facing), attack_type);
+                compute_damage(top, p, ((p->combat).currently_facing), attack_type);
 
             }
             else if ((p->message).command_buffer[where] == 'p' && (p->combat).powermoves > 0)
             {
-                //Do a powermove thingy
                 attack_type = 1;
-                compute_damage(p, ((p->combat).currently_facing), attack_type);
+                compute_damage(top, p, ((p->combat).currently_facing), attack_type);
             }
             else
             {
@@ -392,7 +457,6 @@ int process_command(struct client *p)
                 (p->message).after = (p->message).message_buffer;
                 sprintf(outbuf, "\nSpeak: \r\n");
                 write(p->fd, outbuf, strlen(outbuf) + 1);
-                //int process_result = process_message(p);
                 p->must_process = 1;
 
             }
@@ -431,10 +495,9 @@ int handleclient(struct client *p, struct client *top)
         return speak_result;
 
     }
-    //Process their commands since they are facing someone and it is their turn
-    if ((p->combat).currently_facing != NULL && p->turn == 1)
+    if ((p->combat).in_match == 1 && p->turn == 1)
     {
-        return process_command(p);
+        return process_command(p, top);
     }
 
     if (p->turn == 0 && p->name[0] != '\0')
@@ -513,7 +576,7 @@ int look_for_opponent(struct client *top, struct client *p)
     struct client *iterator;
     for (iterator = top; iterator != NULL; iterator = iterator->next)
     {
-        if ((iterator->combat).in_match == 0 && (iterator->combat).past_fd != (p->combat).past_fd && (iterator->name)[0] != '\0' && iterator->fd != p->fd)
+        if ((iterator->combat).in_match == 0 && (((iterator->combat).past_fd != p->fd) || ((p->combat).past_fd != iterator->fd)) && (iterator->name)[0] != '\0' && iterator->fd != p->fd)
         {
             (iterator->combat).in_match = 1;
             (p->combat).in_match = 1;
@@ -571,8 +634,9 @@ int bindandlisten(void) {
     return listenfd;  //Return new socket.
 }
 
-static struct client *addclient(struct client *top, int fd, struct in_addr addr) {
+struct client *addclient(struct client *top, int fd, struct in_addr addr) {
     struct client *p = malloc(sizeof(struct client));
+    struct client *tmp = top;
     if (!p) {
         perror("malloc");
         exit(1);
@@ -612,15 +676,15 @@ static struct client *addclient(struct client *top, int fd, struct in_addr addr)
         return top;
     }
     //Adding to back of the client list`1
-    while (top->next != NULL)
+    while (tmp->next != NULL)
     {
-        top = top->next;
+        tmp = tmp->next;
     }
-    top->next = p;
+    tmp->next = p;
     return top;
 }
 
-static struct client *removeclient(struct client *top, int fd) {
+struct client *removeclient(struct client *top, int fd) {
     struct client **p;
 
     for (p = &top; *p && (*p)->fd != fd; p = &(*p)->next)
@@ -628,6 +692,26 @@ static struct client *removeclient(struct client *top, int fd) {
     // Now, p points to (1) top, or (2) a pointer to another client
     // This avoids a special case for removing the head of the list
     if (*p) {
+        if (((*p)->combat).in_match == 1)
+        {   
+            
+            char outbuf[512];
+            sprintf(outbuf, "\n--%s dropped. You win!\n\r\n", (*p)->name);
+            write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+            (((*p)->combat).currently_facing)->turn = 0;
+            ((((*p)->combat).currently_facing)->combat).in_match = 0;
+            ((((*p)->combat).currently_facing)->combat).past_fd = 0;
+            sprintf(outbuf, "\nAwaiting next opponent...\r\n");
+            write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+            sprintf(outbuf, "\n**%s leaves **\r\n", (*p)->name);
+            broadcast(top, outbuf, strlen(outbuf) + 1);
+            int look_result = look_for_opponent(top, ((((*p)->combat).currently_facing)));
+            if (look_result == 1)
+            {
+                print_stats(((*p)->combat).currently_facing, ( (((*p)->combat).currently_facing)->combat).currently_facing);
+                print_options(((*p)->combat).currently_facing, ( (((*p)->combat).currently_facing)->combat).currently_facing);
+            }
+        }
         struct client *t = (*p)->next;
         printf("Removing client %d %s\n", fd, inet_ntoa((*p)->ipaddr));
         free(*p);
@@ -640,7 +724,7 @@ static struct client *removeclient(struct client *top, int fd) {
 }
 
 
-static void broadcast(struct client *top, char *s, int size) 
+void broadcast(struct client *top, char *s, int size) 
 {
     struct client *p;
     for (p = top; p; p = p->next)
@@ -674,85 +758,17 @@ int find_network_newline(char *buf, int inbuf)
   return -1;
 }
 
-int generatehp()
+int generatehp(void)
 {
 
     int randomnumber = random() % (MAX_SCORE - MIN_SCORE + 1) + MIN_SCORE;
     return randomnumber;
 }
 
-int generatepowermoves()
+int generatepowermoves(void)
 {
 
     int numMoves = 1 + (random() % 3);
     return numMoves;
 }
 
-/*
-===========================================================================
-
-* Each player starts a match with between 20 and 30 hitpoints.
-    (Note that hitpoints and powermoves are reset to random values on the start of a new match,
-    independent of what the values may have been following their previous match.)
-
-* Each player starts a match with between one and three powermoves.
-* Damage from a regular attack is 2-6 hitpoints.
-* Powermoves have a 50% chance of missing. If they hit,
-then they cause three times the damage of a regular attack.
-
- ============================================================================
-// MAX_SCORE and MIN_SCORE macros defined above
-int generateHitPoints(){
-
-    int randomnumber = random() % (MAX_SCORE - MIN_SCORE + 1) + MIN_SCORE;
-    return randomnumber;
-
-
-}
-
-// initialize Regular Attack points in range 2-6
-int generateAttacks(){
-
-    int attackPoints = random() % (6 - 2 + 1) + 2;
-    return attackPoints;
-
-
-}
-
-
-// Compute Damage from attack
-void computeDamage(int attack_points, int hit_points, char buffer[]){
-
-    //Powermoves have a 50% chance of missing.
-    int accuracy = 1 + (random() % 2);
-    int numPowermoves = generatePowerMoves();
-    int damage = 0;
-    char move[2];
-
-    //NOTE: check entry is valid and discard invalid 
-    if(strncmp(move,"p",sizeof(move)) == 0) // if STDIN is a powermove
-    { 
-       if(numPowermoves >=1)
-       {
-        numPowermoves -= 1;
-            if(accuracy == 1)//Powermoves hits
-            {   
-                damage = (3 * attack_points);
-                hit_points -= damage; //powermoves cause 3x the damage of a regular attack.
-                printf("%s%s\n","you hit", buffer , "for", damage, "damage!");
-
-            }else{
-                printf("you missed!");
-            }
-        }
-
-    // regular attack
-    }else if(strncmp(move,"a",sizeof(move)) == 0)
-    {
-        hit_points -= attack_points; 
-        printf("%s%s\n","you hit", buffer , "for", attack_points, "damage!");
-
-    }
-    
-
-*/
