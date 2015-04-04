@@ -33,6 +33,11 @@
 
 #define MAX_SCORE 30
 #define MIN_SCORE 20
+
+/*
+* Used to handle messages (such as name and speaking to an opponent)
+* and commands: (a)ttack, (p)owermove and (s)peak
+*/
 struct message_manager {
     char message_buffer[256];
     int room;
@@ -45,6 +50,13 @@ struct message_manager {
     int command_inbuf;
 };
 
+/*
+* Used to manage a match for a client including a pointer to the 
+* client that they are facing, the file descriptor of the client 
+* they faced in the previous match, a boolean variable that 
+* indicates whether they are in a match or not, the hitpoints 
+* and the number of powermoves they have
+*/
 struct match {
     struct client *currently_facing;
     int past_fd;
@@ -53,6 +65,18 @@ struct match {
     int powermoves;
 };
 
+/*
+* - fd is the file descriptor for the client (or socket)
+* - must_process is a boolean variable that indicates
+*   a client in a match has spoken something after
+*   entering the (s) command and it must be 
+*   processed (i.e written to the opponent)
+* - turn is a boolean variable that indicates
+*   if it is their turn or not in a match,
+*   it is set to 0 when they are not in a match
+* - Each client has a struct message and a struct
+*   match to manage messages and matches. 
+*/
 struct client {
     int fd;
     int must_process;
@@ -256,10 +280,24 @@ int main(void)
 * otherwise 0
 */
 int process_message(struct client *p)
-{
+{   
+    //Stores the index of the network newline in a string, or -1 if it doesn't exist
     int where;
+
+    /*The purpose of the first iteration variable is if read returns 0 upon the 
+    * first iteration of the while loop, then we know that the client has exited
+    * But if it returns 0 afterwards, then we know that there was nothing else left to read,
+    * not that the client has exited. 
+    */
     int first_iteration = 0;
     int nbytes; 
+
+    /*Returns 1 if the user is entering a name
+    * Returns 2 if the user is communicating to the opponent after
+    * entering (s) when it is their turn
+    * Returns -1 if some sort of error occurs
+    * Never returns 0. 
+    */
     int return_value = 0;
     while (1)
     {   
@@ -270,25 +308,35 @@ int process_message(struct client *p)
             perror("read");
             return -1;
         }
+
+        //No purpose in continuing read, either reading is complete or the user quit. 
         if (nbytes == 0)
         {
             break;
         }
+
+        //If we get past this point, then the user has not quit and so first_iteration can be set to 1
         first_iteration = 1;
+
+        //From lab 9
         (p->message).inbuf = (p->message).inbuf + nbytes;
+
+        //also from lab 9
         where = find_network_newline((p->message).message_buffer, (p->message).inbuf);
         if (where >= 0)
         {
             (p->message).message_buffer[where] = '\n';
             (p->message).message_buffer[where + 1] = '\0';
 
-
+            //This means that their name has not been set, so it should be set now. 
             if ((p->name)[0] == '\0')
             {
                 (p->message).message_buffer[where] = '\0';
                 strncpy(p->name, (p->message).message_buffer, sizeof(p->message).message_buffer);
                 return_value = 1;
             }
+            //Otherwise, they had pressed the speak command when it was their turn and
+            //this processes what they said. 
             else
             {   int write_check;
                 char outbuf[512];
@@ -299,6 +347,7 @@ int process_message(struct client *p)
                     perror("write");
                     return -1;
                 }
+                //Writes the message they want to send to their opponent's file descriptor
                 strncpy(outbuf, (p->message).message_buffer, sizeof(p->message).message_buffer);
                 write_check = write(((p->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
                 if (write_check == -1)
@@ -313,6 +362,8 @@ int process_message(struct client *p)
         }
         (p->message).room = sizeof((p->message).message_buffer) - (p->message).inbuf;
         (p->message).after = (p->message).message_buffer + (p->message).inbuf;
+
+        //We processed their name or message and therefore we don't have to read anymore. 
         if (return_value == 1 || return_value == 2)
         {
             break;
