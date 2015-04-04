@@ -76,8 +76,8 @@ void computeDamage(int attack_points, int hit_points, char buffer[]);
 int find_network_newline(char *buf, int inbuf);
 int process_message(struct client *p);
 int look_for_opponent(struct client *top, struct client *p);
-void print_stats(struct client *p1, struct client *p2);
-void print_options(struct client *p1, struct client *p2);
+int print_stats(struct client *p1, struct client *p2);
+int print_options(struct client *p1, struct client *p2);
 int generatehp();
 int generatepowermoves();
 int bindandlisten(void);
@@ -185,8 +185,12 @@ int process_message(struct client *p)
     {   
 
         nbytes = read(p->fd, (p->message).after, (p->message).room);
-
-        if (nbytes <= 0)
+        if (nbytes == -1)
+        {
+            perror("read");
+            return -1;
+        }
+        if (nbytes == 0)
         {
             break;
         }
@@ -206,12 +210,22 @@ int process_message(struct client *p)
                 return_value = 1;
             }
             else
-            {   
+            {   int write_check;
                 char outbuf[512];
                 sprintf(outbuf, "%s takes a break to tell you: \r\n", p->name);
-                write(((p->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+                write_check = write(((p->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+                if (write_check == -1)
+                {
+                    perror("write");
+                    return -1;
+                }
                 strncpy(outbuf, (p->message).message_buffer, sizeof(p->message).message_buffer);
-                write(((p->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+                write_check = write(((p->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+                if (write_check == -1)
+                {
+                    perror("write");
+                    return -1;
+                }
                 return_value = 2;
             }
             (p->message).inbuf -= where + 2;
@@ -245,57 +259,129 @@ int process_message(struct client *p)
 }
 
 
-void print_stats(struct client *p1, struct client *p2)
+int print_stats(struct client *p1, struct client *p2)
 {
     char outbuf[512];
+    int write_check;
 
     sprintf(outbuf, "Your hitpoints: %d\r\n", (p1->combat).hp);
-    write(p1->fd, outbuf, strlen(outbuf) + 1);
+    write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+    if (write_check == -1)
+    {
+        perror("write");
+        return -1;
+    }
     sprintf(outbuf, "Your powermoves: %d\n\r\n", (p1->combat).powermoves);
-    write(p1->fd, outbuf, strlen(outbuf) + 1);
+    write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+    if (write_check == -1)
+    {
+        perror("write");
+        return -1;
+    }
     sprintf(outbuf, "%s's hitpoints: %d\r\n", p2->name, (p2->combat).hp);
-    write(p1->fd, outbuf, strlen(outbuf) + 1);
-
+    write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+    if (write_check == -1)
+    {
+        perror("write");
+        return -1;
+    }
     sprintf(outbuf, "Your hitpoints: %d\r\n", (p2->combat).hp);
-    write(p2->fd, outbuf, strlen(outbuf) + 1);
+    write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+    if (write_check == -1)
+    {
+        perror("write");
+        return -1;
+    }
     sprintf(outbuf, "Your powermoves: %d\n\r\n", (p2->combat).powermoves);
-    write(p2->fd, outbuf, strlen(outbuf) + 1);
+    write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+    if (write_check == -1)
+    {
+        perror("write");
+        return -1;
+    }
     sprintf(outbuf, "%s's hitpoints: %d\r\n", p1->name, (p1->combat).hp);
-    write(p2->fd, outbuf, strlen(outbuf) + 1);
+    write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+    if (write_check == -1)
+    {
+        perror("write");
+        return -1;
+    }
+    return 0;
 }
 
-void print_options(struct client *p1, struct client *p2)
+int print_options(struct client *p1, struct client *p2)
 {
     char outbuf[512];
-
+    int write_check;
     if (p1->turn == 1)
     {
         sprintf(outbuf, "\n(a)ttack\r\n");
-        write(p1->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
         if ((p1->combat).powermoves > 0)
         {
             sprintf(outbuf, "(p)owermove\r\n");
-            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
         }
         sprintf(outbuf, "(s)peak something\r\n");
-        write(p1->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
         sprintf(outbuf, "waiting for %s to strike...\n\r\n", p1->name);
-        write(p2->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
     }
     else
     {   
         sprintf(outbuf, "\n(a)ttack\r\n");
-        write(p2->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
         if ((p2->combat).powermoves > 0)
         {
             sprintf(outbuf, "(p)owermove\r\n");
-            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
         }
         sprintf(outbuf, "(s)peak something\r\n");
-        write(p2->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
         sprintf(outbuf, "waiting for %s to strike...\n\r\n", p2->name);
-        write(p1->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
     }
+    return 0;
 }
 
 int find_command(char *buf, int inbuf, int powermoves_left)
@@ -323,27 +409,63 @@ int compute_damage(struct client *top, struct client *p1, struct client *p2, int
     char outbuf[512];
     int attack_damage = normal_attack();
     p1->turn = 0;
+    int write_check;
     //Normal attack
     if (attack_type == 0)
     {
         sprintf(outbuf, "\nYou hit %s for %d damage!\r\n", p2->name, attack_damage);
-        write(p1->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
         sprintf(outbuf, "\n%s hits you for %d damage!\r\n", p1->name, attack_damage);
-        write(p2->fd, outbuf, strlen(outbuf) + 1);
+        write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
         (p2->combat).hp = (p2->combat).hp - attack_damage;
         if ((p2->combat).hp  <= 0)
         {   
             sprintf(outbuf, "%s gives up. You win!\r\n", p2->name);
-            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             sprintf(outbuf, "You are no match for %s. You scurry away...\r\n", p1->name);
-            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             (p1->combat).in_match = 0;
             (p2->combat).in_match = 0;
             sprintf(outbuf, "\nAwaiting next opponent...\r\n");
-            write(p1->fd, outbuf, strlen(outbuf) + 1);
-            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
+            write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             int search_result_one = look_for_opponent(top, p1);
             int search_result_two = look_for_opponent(top, p2);
+            if (search_result_one == -1 || search_result_two == -1)
+            {
+                printf("Error occurred while looking for an opponent");
+                return -1;
+            }
             if (search_result_one == 1)
             {
                 print_stats(p1, (p1->combat).currently_facing);
@@ -368,23 +490,58 @@ int compute_damage(struct client *top, struct client *p1, struct client *p2, int
         {
             int power_damage = 3 * attack_damage;
             sprintf(outbuf, "\nYou hit %s for %d damage\r\n", p2->name, power_damage);
-            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             sprintf(outbuf, "\n%s hit you for %d damage\r\n", p1->name, power_damage);
-            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             (p2->combat).hp = (p2->combat).hp - power_damage;
             if ((p2->combat).hp  <= 0)
             {
                 sprintf(outbuf, "%s gives up. You win!\r\n", p2->name);
-                write(p1->fd, outbuf, strlen(outbuf) + 1);
+                write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+                if (write_check == -1)
+                {
+                    perror("write");
+                    return -1;
+                }
                 sprintf(outbuf, "You are no match for %s. You scurry away...\r\n", p1->name);
-                write(p2->fd, outbuf, strlen(outbuf) + 1);
+                write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+                if (write_check == -1)
+                {
+                    perror("write");
+                    return -1;
+                }
                 (p1->combat).in_match = 0;
                 (p2->combat).in_match = 0;
                 sprintf(outbuf, "\nAwaiting next opponent...\r\n");
-                write(p1->fd, outbuf, strlen(outbuf) + 1);
-                write(p2->fd, outbuf, strlen(outbuf) + 1);
+                write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+                if (write_check == -1)
+                {
+                    perror("write");
+                    return -1;
+                }
+                write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+                if (write_check == -1)
+                {
+                    perror("write");
+                    return -1;
+                }
                 int search_result_one = look_for_opponent(top, p1);
                 int search_result_two = look_for_opponent(top, p2);
+                if (search_result_one == -1 || search_result_two == -1)
+                {
+                    printf("An error occurred while searching for an opponent");
+                    return -1;
+                }
                 if (search_result_one == 1)
                 {
                     print_stats(p1, (p1->combat).currently_facing);
@@ -407,9 +564,19 @@ int compute_damage(struct client *top, struct client *p1, struct client *p2, int
         else
         {
             sprintf(outbuf, "\nYou missed!\r\n");
-            write(p1->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p1->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             sprintf(outbuf, "\n%s missed you!\r\n", p1->name);
-            write(p2->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write(p2->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             p2->turn = 1;
             print_stats(p1, p2);
             print_options(p1, p2);
@@ -430,7 +597,12 @@ int process_command(struct client *p, struct client *top)
     while (1)
     {
         nbytes = read(p->fd, (p->message).command_after, (p->message).command_room);
-        if (nbytes <= 0)
+        if (nbytes == -1)
+        {
+            perror("read");
+            return -1;
+        }
+        if (nbytes == 0)
         {
             break;
         }
@@ -443,21 +615,27 @@ int process_command(struct client *p, struct client *top)
             if ((p->message).command_buffer[where] == 'a')
             {   
                 attack_type = 0;
-                compute_damage(top, p, ((p->combat).currently_facing), attack_type);
+                return compute_damage(top, p, ((p->combat).currently_facing), attack_type);
 
             }
             else if ((p->message).command_buffer[where] == 'p' && (p->combat).powermoves > 0)
             {
                 attack_type = 1;
-                compute_damage(top, p, ((p->combat).currently_facing), attack_type);
+                return compute_damage(top, p, ((p->combat).currently_facing), attack_type);
             }
             else
-            {
+            {   
+                int write_check;
                 (p->message).inbuf = 0;
                 (p->message).room = sizeof((p->message).message_buffer);
                 (p->message).after = (p->message).message_buffer;
                 sprintf(outbuf, "\nSpeak: \r\n");
-                write(p->fd, outbuf, strlen(outbuf) + 1);
+                write_check = write(p->fd, outbuf, strlen(outbuf) + 1);
+                if (write_check == -1)
+                {
+                    perror("write");
+                    return -1;
+                }
                 p->must_process = 1;
 
             }
@@ -515,13 +693,23 @@ int handleclient(struct client *p, struct client *top)
     }
 
     if (process_message_result == 1)
-    {
+    {   
+        int write_check;
         char *message = "You are awaiting an opponent\r\n";
-        write(p->fd, message, strlen(message) + 1);
+        write_check = write(p->fd, message, strlen(message) + 1);
+        if (write_check == -1)
+        {
+            perror("write");
+            return -1;
+        }
         
         sprintf(outbuf, "\n%s has joined the arena\r\n", p->name);
         broadcast(top, outbuf, strlen(outbuf) + 1);
         int search_result = look_for_opponent(top, p);
+        if (search_result == -1)
+        {
+            return search_result;
+        }
         if (search_result == 1)
         {   
             print_stats(p, (p->combat).currently_facing);
@@ -542,7 +730,12 @@ int read_and_discard(struct client *p)
     while (1)
     {
         nbytes = read(p->fd, (p->message).after, (p->message).room);
-        if (nbytes <=0)
+        if (nbytes == -1)
+        {
+            perror("read");
+            return -1;
+        }
+        if (nbytes ==0)
         {
             break;
         }
@@ -578,7 +771,8 @@ int look_for_opponent(struct client *top, struct client *p)
     for (iterator = top; iterator != NULL; iterator = iterator->next)
     {
         if ((iterator->combat).in_match == 0 && (((iterator->combat).past_fd != p->fd) || ((p->combat).past_fd != iterator->fd)) && (iterator->name)[0] != '\0' && iterator->fd != p->fd)
-        {
+        {   
+            int write_check;
             (iterator->combat).in_match = 1;
             (p->combat).in_match = 1;
             (iterator->combat).currently_facing = p;
@@ -591,9 +785,19 @@ int look_for_opponent(struct client *top, struct client *p)
             (p->combat).powermoves = generatepowermoves();
             p->turn = 1;
             sprintf(message, "You engage %s\r\n", p->name);
-            write(iterator->fd, message, strlen(message) + 1);
+            write_check = write(iterator->fd, message, strlen(message) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             sprintf(message, "You engage %s\r\n", iterator->name);
-            write(p->fd, message, strlen(message) + 1);
+            write_check = write(p->fd, message, strlen(message) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                return -1;
+            }
             return 1;
         }
     }
@@ -696,15 +900,24 @@ struct client *removeclient(struct client *top, int fd) {
         char outbuf[512];
         if (((*p)->combat).in_match == 1)
         {   
-            
-            
+            int write_check;
             sprintf(outbuf, "\n--%s dropped. You win!\n\r\n", (*p)->name);
-            write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                exit(1);
+            }
             (((*p)->combat).currently_facing)->turn = 0;
             ((((*p)->combat).currently_facing)->combat).in_match = 0;
             ((((*p)->combat).currently_facing)->combat).past_fd = 0;
             sprintf(outbuf, "\nAwaiting next opponent...\r\n");
-            write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+            write_check = write((((*p)->combat).currently_facing)->fd, outbuf, strlen(outbuf) + 1);
+            if (write_check == -1)
+            {
+                perror("write");
+                exit(1);
+            }
             int look_result = look_for_opponent(top, ((((*p)->combat).currently_facing)));
             if (look_result == 1)
             {
@@ -729,11 +942,16 @@ struct client *removeclient(struct client *top, int fd) {
 void broadcast(struct client *top, char *s, int size) 
 {
     struct client *p;
+    int write_check;
     for (p = top; p; p = p->next)
-    {
-        write(p->fd, s, size);
+    {   
+        write_check = write(p->fd, s, size);
+        if (write_check == -1)
+        {
+            perror("write");
+        }
     }
-    /* should probably check write() return value and perhaps remove client */
+   
 }
 
 /*
