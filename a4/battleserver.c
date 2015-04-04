@@ -66,25 +66,105 @@ struct client {
 };
 
 
-
+/*
+* Adds a client to the list of clients currently in the game and
+* returns the new list. 
+*/
 struct client *addclient(struct client *top, int fd, struct in_addr addr);
+
+/*
+* Removes a client from the list of clients currently in the game and
+* returns the new list
+*/
 struct client *removeclient(struct client *top, int fd);
+
+/*
+* Writes a message to every player currently in the game
+*/
 void broadcast(struct client *top, char *s, int size);
+
+/*
+* Only called when select notices that the client is ready to be handled and 
+* performs the necessary actions based on the client's actions and state. 
+*/
 int handleclient(struct client *p, struct client *top);
-int generateHitPoints();
-void computeDamage(int attack_points, int hit_points, char buffer[]);
-int find_network_newline(char *buf, int inbuf);
-int process_message(struct client *p);
-int look_for_opponent(struct client *top, struct client *p);
-int print_stats(struct client *p1, struct client *p2);
-int print_options(struct client *p1, struct client *p2);
+
+/*
+* Randomly generates hitpoints for a client for the match. 
+* The number of hitpoints is a random number between 20 and 30 (inclusive)
+*/
 int generatehp();
+
+
+/*
+* Looks for a network new line given a line of text and returns the index of the '\r' 
+*/
+int find_network_newline(char *buf, int inbuf);
+
+/*
+* Processes a message and either stores it as the client's name if
+* the client has yet to enter a name or writes it to the opponent client
+* in a match. 
+*/
+int process_message(struct client *p);
+
+/*
+* Looks for a suitable opponent for a client.
+*/
+int look_for_opponent(struct client *top, struct client *p);
+
+/*
+* Prints client's hitpoints, number of powermoves and opponent client's hitpoints
+*/
+int print_stats(struct client *p1, struct client *p2);
+
+/*
+* Prints a list of options (attack, speak and powermoves) or states that they are waiting
+* for the opposing client to do something.
+*/
+int print_options(struct client *p1, struct client *p2);
+
+/*
+* Randomly generates the number of powermoves that a client can use in a match. The
+* number is between 1 and 3 (inclusive)
+*/
 int generatepowermoves();
+
+/*
+* Creates a new socket to allow communication between clients
+*/
 int bindandlisten(void);
+
+/*
+* Reads and discards any useless text that the client enters 
+* (such as typing when it is not their turn)
+*/
 int read_and_discard(struct client *p);
-struct client *move_to_back(struct client *top, struct client *p);
+
+/*
+* Computes damage from an attack (normal attack and powermove) and 
+* decrements a client's hitpoints accordingly. Also 
+* ends the match if all hitpoints are gone for a client and 
+* attempts to start a new one. 
+*/
 int compute_damage(struct client *top, struct client *p1, struct client *p2, int attack_type);
+
+/*
+* Processes a command entered by a client while in a match 
+* (a for attack, s for speak or p for powermove)
+*/
 int process_command(struct client *p, struct client *top);
+
+/*
+* Searches for a valid command (a, p, s) in a line of text and returns the index of the command.
+*/
+int find_command(char *buf, int inbuf, int powermoves_left);
+
+/*
+* Randomly generates number of points in a normal attack. 
+* The number is between 2 and 6 (inclusive)
+*/
+int normal_attack();
 
 int main(void)
 {
