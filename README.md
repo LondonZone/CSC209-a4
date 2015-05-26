@@ -1,4 +1,4 @@
-CSC209 Network Programming Assignment Licensed Under the MIT License 
+CSC209 Network Programming Assignment 
 
 Unix sockets server for a text-based battle game, modelled after a Pokemon battle. 
 
